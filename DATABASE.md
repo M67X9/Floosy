@@ -1,6 +1,6 @@
 # Floosy database
 
-Floosy stores expenses in a Supabase (Postgres) project named **Floosy**. Everything else (name, income, budgets, language, theme) stays on the device.
+Floosy stores expenses in a Supabase (Postgres) project named **Floosy**. Two tables: `"Expenses"` (the data) and `"Expenses_History"` (an automatic log of edits and deletes). Everything else (name, income, budgets, language, theme) stays on the device.
 
 ## Table: `public."Expenses"`
 
@@ -51,6 +51,45 @@ create table public."Expenses" (
 create index expenses_expense_date_idx on public."Expenses" (expense_date desc, expense_time desc);
 
 alter table public."Expenses" enable row level security;
+```
+
+## Table: `public."Expenses_History"`
+
+An audit log of edited and deleted expenses. **Nothing in the app writes to it**: a database trigger (`expenses_log_changes`, function `log_expense_change`) on `"Expenses"` adds a row after every edit or delete, however it was made (app, dashboard or SQL).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` | Primary key of the log row |
+| `expense_id` | `uuid` | Id of the expense in `"Expenses"`. No foreign key, because deleted expenses no longer exist there |
+| `action` | `text` | `edited` or `deleted` |
+| `note` | `text` | `Edited` or `Deleted` |
+| `action_at` | `timestamptz` | When it happened (UTC) |
+| `action_at_kuwait` | `timestamp` | The same moment in Kuwait time |
+| `amount_kwd`, `expense_date`, `expense_time`, `category`, `description` | as in `"Expenses"` | The expense's values after an edit, or the values it had when it was deleted |
+| `original_created_at` | `timestamptz` | When the expense was first created |
+| `changes` | `jsonb` | Edits only: each changed field with its `before` and `after`. Null for deletes |
+
+Example `changes` value:
+
+```json
+{ "amount_kwd": { "before": 1.25, "after": 2 }, "category": { "before": "food", "after": "shop" } }
+```
+
+Behaviour:
+
+- Saving an expense without changing anything is not logged.
+- Only changes made from now on are recorded; earlier edits and deletes were not.
+- **Reset app** deletes every expense, so it logs one `deleted` row per expense.
+- The trigger function is `security definer` and cannot be called through the API (execute is revoked from `public`, `anon` and `authenticated`).
+- Row-level security is on with **no policies**, so the app's public key cannot read, change or erase the log. Read it in the Supabase dashboard (Table Editor or SQL Editor) or with the service role.
+
+Read the history of one expense:
+
+```sql
+select action, note, action_at_kuwait, amount_kwd, category, description, changes
+from public."Expenses_History"
+where expense_id = '<expense id>'
+order by action_at;
 ```
 
 ## Access rules (row-level security)
