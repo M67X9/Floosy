@@ -101,13 +101,15 @@ export default function Home() {
               <Txt size={46} w={700} num ltr ls={-1.6} color={theme.heroInk}>{sh.slice(0, dot)}<Txt size={26} w={700} num color={theme.heroMuted}>{sh.slice(dot)}</Txt></Txt>
               <Txt size={16} w={700} color={theme.lime}>{cur}</Txt>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 99, backgroundColor: up ? 'rgba(253,186,116,.16)' : 'rgba(201,242,107,.16)' }}>
-                <Icon name={up ? 'up' : 'down'} size={16} color={up ? '#FDBA74' : '#C9F26B'} />
-                <Txt size={13} w={700} ltr color={up ? '#FDBA74' : '#C9F26B'}>{(up ? '+' : '−') + Math.abs(ms.change).toFixed(1) + '%'}</Txt>
+            {ms.prevSame > 0 ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 99, backgroundColor: up ? 'rgba(253,186,116,.16)' : 'rgba(201,242,107,.16)' }}>
+                  <Icon name={up ? 'up' : 'down'} size={16} color={up ? '#FDBA74' : '#C9F26B'} />
+                  <Txt size={13} w={700} ltr color={up ? '#FDBA74' : '#C9F26B'}>{(up ? '+' : '−') + Math.abs(ms.change).toFixed(1) + '%'}</Txt>
+                </View>
+                <Txt size={13} color={theme.heroMuted}>{t.vsSame}</Txt>
               </View>
-              <Txt size={13} color={theme.heroMuted}>{t.vsSame}</Txt>
-            </View>
+            ) : null}
           </View>
 
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>

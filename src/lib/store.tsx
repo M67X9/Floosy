@@ -1,17 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getLocales } from 'expo-localization';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { SEED_DEMO_DATA } from './config';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { todayISO } from './dates';
+import { deleteAllExpenses, deleteExpense, fetchExpenses, insertExpense, updateExpense } from './expenses';
 import { T, type CatId, type Lang, type Strings } from './i18n';
-import { seedTxs } from './seed';
 import { dark as darkTheme, light as lightTheme, type Theme } from './theme';
 import type { Profile, Tx } from './types';
 
 const KEY = 'floosy.state.v1';
 
+// Expenses live in Supabase; `txs` here is a local cache so the app opens with data before the network answers.
 type Persisted = {
-  lang: Lang; dark: boolean; profile: Profile | null; txs: Tx[]; nextId: number;
+  lang: Lang; dark: boolean; profile: Profile | null; txs: Tx[];
   budget: number; catBudgets: Partial<Record<CatId, number>>;
 };
 
@@ -19,21 +19,21 @@ const DEFAULT_CAT_BUDGETS: Persisted['catBudgets'] = { food: 200, shop: 120, loa
 
 function initial(): Persisted {
   const deviceAr = getLocales()[0]?.languageCode === 'ar';
-  return {
-    lang: deviceAr ? 'ar' : 'en', dark: false, profile: null,
-    txs: SEED_DEMO_DATA ? seedTxs(todayISO()) : [], nextId: 100000,
-    budget: 750, catBudgets: DEFAULT_CAT_BUDGETS
-  };
+  return { lang: deviceAr ? 'ar' : 'en', dark: false, profile: null, txs: [], budget: 750, catBudgets: DEFAULT_CAT_BUDGETS };
 }
+
+type Patch = { amount?: number; date?: string; cat?: CatId; description?: string };
 
 type Ctx = Persisted & {
   ready: boolean; today: string; t: Strings; theme: Theme; rtl: boolean;
   setLang: (l: Lang) => void; setDark: (d: boolean) => void;
   saveProfile: (p: Profile) => void;
-  addTx: (x: Omit<Tx, 'id'>) => number;
-  updateTx: (id: number, patch: Partial<Omit<Tx, 'id'>>) => void;
-  deleteTx: (id: number) => void;
+  // Each returns whether it succeeded (false = the database could not be reached).
+  addTx: (x: { amount: number; date: string; cat: CatId; description: string }) => Promise<Tx | null>;
+  updateTx: (id: string, patch: Patch) => Promise<boolean>;
+  deleteTx: (id: string) => Promise<boolean>;
   setBudget: (n: number) => void;
+  resetAll: () => Promise<boolean>;
 };
 
 const StoreCtx = createContext<Ctx | null>(null);
@@ -42,15 +42,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [s, setS] = useState<Persisted>(initial);
   const [ready, setReady] = useState(false);
   const [today, setToday] = useState(todayISO);
-  const nextId = useRef(s.nextId);
-  nextId.current = s.nextId;
 
   useEffect(() => {
     AsyncStorage.getItem(KEY)
-      .then((raw) => { if (raw) setS((cur) => ({ ...cur, ...JSON.parse(raw) })); })
+      .then((raw) => {
+        if (!raw) return;
+        const saved = JSON.parse(raw) as Partial<Persisted>;
+        // Older builds cached expenses with numeric ids; drop those, the database is the source of truth.
+        setS((cur) => ({ ...cur, ...saved, txs: (saved.txs ?? []).filter((x) => typeof x.id === 'string') }));
+      })
       .catch(() => {})
       .finally(() => setReady(true));
   }, []);
+
+  // Pull the latest expenses from Supabase once the app is ready.
+  useEffect(() => {
+    if (!ready) return;
+    fetchExpenses().then((txs) => setS((c) => ({ ...c, txs }))).catch((e) => console.warn('Could not load expenses', e));
+  }, [ready]);
 
   useEffect(() => {
     if (!ready) return;
@@ -66,19 +75,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const setLang = useCallback((lang: Lang) => setS((c) => ({ ...c, lang })), []);
   const setDark = useCallback((dark: boolean) => setS((c) => ({ ...c, dark })), []);
   const saveProfile = useCallback((profile: Profile) => setS((c) => ({ ...c, profile })), []);
-  const addTx = useCallback((x: Omit<Tx, 'id'>) => {
-    const id = nextId.current;
-    setS((c) => ({ ...c, txs: c.txs.concat([{ ...x, id }]), nextId: c.nextId + 1 }));
-    return id;
-  }, []);
-  const updateTx = useCallback((id: number, patch: Partial<Omit<Tx, 'id'>>) => setS((c) => ({ ...c, txs: c.txs.map((x) => (x.id === id ? { ...x, ...patch } : x)) })), []);
-  const deleteTx = useCallback((id: number) => setS((c) => ({ ...c, txs: c.txs.filter((x) => x.id !== id) })), []);
   const setBudget = useCallback((budget: number) => setS((c) => ({ ...c, budget })), []);
+
+  const addTx = useCallback(async (x: Parameters<Ctx['addTx']>[0]) => {
+    try {
+      const tx = await insertExpense(x);
+      setS((c) => ({ ...c, txs: c.txs.concat([tx]) }));
+      return tx;
+    } catch (e) { console.warn('Could not add expense', e); return null; }
+  }, []);
+
+  const updateTx = useCallback(async (id: string, patch: Patch) => {
+    try {
+      const tx = await updateExpense(id, patch);
+      setS((c) => ({ ...c, txs: c.txs.map((x) => (x.id === id ? tx : x)) }));
+      return true;
+    } catch (e) { console.warn('Could not update expense', e); return false; }
+  }, []);
+
+  const deleteTx = useCallback(async (id: string) => {
+    try {
+      await deleteExpense(id);
+      setS((c) => ({ ...c, txs: c.txs.filter((x) => x.id !== id) }));
+      return true;
+    } catch (e) { console.warn('Could not delete expense', e); return false; }
+  }, []);
+
+  // Back to a brand-new install, including the expenses in Supabase; language and appearance are kept.
+  const resetAll = useCallback(async () => {
+    try {
+      await deleteAllExpenses();
+      setS((c) => ({ ...initial(), lang: c.lang, dark: c.dark }));
+      return true;
+    } catch (e) { console.warn('Could not reset', e); return false; }
+  }, []);
 
   const value = useMemo<Ctx>(() => ({
     ...s, ready, today, t: T[s.lang], theme: s.dark ? darkTheme : lightTheme, rtl: s.lang === 'ar',
-    setLang, setDark, saveProfile, addTx, updateTx, deleteTx, setBudget
-  }), [s, ready, today, setLang, setDark, saveProfile, addTx, updateTx, deleteTx, setBudget]);
+    setLang, setDark, saveProfile, addTx, updateTx, deleteTx, setBudget, resetAll
+  }), [s, ready, today, setLang, setDark, saveProfile, addTx, updateTx, deleteTx, setBudget, resetAll]);
 
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
 }

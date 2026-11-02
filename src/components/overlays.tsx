@@ -84,6 +84,8 @@ function ExpenseSheet({ editing }: { editing: Tx | null }) {
   const [showCal, setShowCal] = useState(false);
   const [err, setErr] = useState(false);
   const [saved, setSaved] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
   const shake = useRef(new Animated.Value(0)).current;
   const amountRef = useRef<ComponentRef<typeof TextInput>>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -99,21 +101,25 @@ function ExpenseSheet({ editing }: { editing: Tx | null }) {
     Animated.sequence([-8, 7, -5, 3, 0].map((x) => Animated.timing(shake, { toValue: x, duration: 80, useNativeDriver: true }))).start();
   };
 
-  const save = () => {
+  const save = async () => {
     if (!valid) { setErr(true); doShake(); amountRef.current?.focus(); return; }
+    if (saving) return;
     const value = Math.round(n * 1000) / 1000;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    setSaving(true); setFailed(false);
     if (editing) {
-      const patch: Partial<Tx> = { amount: value, cat, date };
-      if (desc !== initialDesc) { patch.en = desc.trim(); patch.ar = desc.trim(); }
-      updateTx(editing.id, patch);
+      const ok = await updateTx(editing.id, { amount: value, cat, date, description: desc !== initialDesc ? desc.trim() : undefined });
+      setSaving(false);
+      if (!ok) { setFailed(true); return; }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       flash(editing.id);
       closeSheet();
       showToast(t.toastSaved);
     } else {
-      const d = desc.trim();
-      const id = addTx({ amount: value, cat, date, en: d, ar: d });
-      flash(id);
+      const tx = await addTx({ amount: value, cat, date, description: desc.trim() });
+      setSaving(false);
+      if (!tx) { setFailed(true); return; }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      flash(tx.id);
       setSaved(value);
       closeTimer.current = setTimeout(closeSheet, 900);
     }
@@ -200,19 +206,21 @@ function ExpenseSheet({ editing }: { editing: Tx | null }) {
         </View>
       </View>
 
-      <Press onPress={save} disabled={!valid} style={{ height: 56, borderRadius: 18, marginTop: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: valid ? theme.brand : theme.surface2 }}>
+      {failed ? <Txt size={13} w={600} color={theme.up} align="center">{t.toastError}</Txt> : null}
+      <Press onPress={save} disabled={!valid || saving} style={{ height: 56, borderRadius: 18, marginTop: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: valid ? theme.brand : theme.surface2 }}>
         <Icon name="check" size={20} color={valid ? theme.brandInk : theme.muted} />
-        <Txt size={16} w={700} color={valid ? theme.brandInk : theme.muted}>{editing ? t.saveChanges : t.save}</Txt>
+        <Txt size={16} w={700} color={valid ? theme.brandInk : theme.muted}>{saving ? '…' : editing ? t.saveChanges : t.save}</Txt>
       </Press>
     </SheetFrame>
   );
 }
 
 /* ---------- detail ---------- */
-function DetailSheet({ id }: { id: number }) {
+function DetailSheet({ id }: { id: string }) {
   const { lang, t, theme, today, txs, deleteTx } = useStore();
   const { closeSheet, openEdit, showToast } = useUI();
   const [confirm, setConfirm] = useState(false);
+  const [failed, setFailed] = useState(false);
   const x = txs.find((y) => y.id === id);
   if (!x) return null;
   const c = catOf(x.cat);
@@ -250,9 +258,10 @@ function DetailSheet({ id }: { id: number }) {
         <View accessibilityRole="alert" style={{ borderRadius: 18, borderWidth: 1, borderColor: theme.line, padding: 16, gap: 12 }}>
           <Txt size={16} w={700}>{t.confirmDel}</Txt>
           <Txt size={14} color={theme.muted}>{t.confirmBody}</Txt>
+          {failed ? <Txt size={13} w={600} color={theme.up}>{t.toastError}</Txt> : null}
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <Press onPress={() => setConfirm(false)} style={{ ...btn, height: 48, borderRadius: 14 }}><Txt size={15} w={700}>{t.cancel}</Txt></Press>
-            <Press onPress={() => { deleteTx(x.id); closeSheet(); showToast(t.toastDeleted); }} style={{ ...btn, height: 48, borderRadius: 14, borderWidth: 0, backgroundColor: theme.danger }}><Txt size={15} w={700} color="#FFFFFF">{t.delete}</Txt></Press>
+            <Press onPress={async () => { const ok = await deleteTx(x.id); if (!ok) { setFailed(true); return; } closeSheet(); showToast(t.toastDeleted); }} style={{ ...btn, height: 48, borderRadius: 14, borderWidth: 0, backgroundColor: theme.danger }}><Txt size={15} w={700} color="#FFFFFF">{t.delete}</Txt></Press>
           </View>
         </View>
       )}

@@ -1,4 +1,4 @@
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import Svg, { Circle, G } from 'react-native-svg';
 import { shortDate } from '../lib/dates';
 import { f3 } from '../lib/money';
@@ -51,7 +51,9 @@ export function Donut({ segs, total, sel, onPick }: { segs: DonutSeg[]; total: n
             <Circle
               key={c.id} cx={80} cy={80} r={R} fill="none" stroke={c.color} strokeWidth={sel === c.id ? 22 : 18}
               strokeDasharray={`${len.toFixed(2)} ${(C - len).toFixed(2)}`} strokeDashoffset={-off}
-              opacity={sel && sel !== c.id ? 0.25 : 1} onPress={() => onPick(c.id)}
+              opacity={sel && sel !== c.id ? 0.25 : 1}
+              // react-native-svg forwards responder props to DOM nodes on web, which logs warnings; the legend handles taps there.
+              onPress={Platform.OS === 'web' ? undefined : () => onPick(c.id)}
             />
           );
           off += full;

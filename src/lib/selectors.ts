@@ -5,7 +5,7 @@ import type { Tx } from './types';
 
 export const sum = (a: { amount: number }[]) => a.reduce((s, x) => s + x.amount, 0);
 export const catOf = (id: CatId): Cat => CATS.find((c) => c.id === id) || CATS[9];
-export const sortDesc = (a: Tx, b: Tx) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id);
+export const sortDesc = (a: Tx, b: Tx) => (a.date !== b.date ? (a.date < b.date ? 1 : -1) : a.time !== b.time ? (a.time < b.time ? 1 : -1) : a.id < b.id ? 1 : -1);
 export const pctOf = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0) + '%';
 
 export function monthStats(txs: Tx[], today: string) {

@@ -1,12 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Tx } from '../lib/types';
 
-export type Sheet = { kind: 'add'; editing: Tx | null } | { kind: 'detail'; id: number } | null;
+export type Sheet = { kind: 'add'; editing: Tx | null } | { kind: 'detail'; id: string } | null;
 
 type UI = {
-  sheet: Sheet; flashId: number | null; toast: { id: number; msg: string } | null; editingProfile: boolean;
-  openAdd: () => void; openEdit: (x: Tx) => void; openDetail: (id: number) => void; closeSheet: () => void;
-  showToast: (msg: string) => void; flash: (id: number) => void;
+  sheet: Sheet; flashId: string | null; toast: { id: number; msg: string } | null; editingProfile: boolean;
+  openAdd: () => void; openEdit: (x: Tx) => void; openDetail: (id: string) => void; closeSheet: () => void;
+  showToast: (msg: string) => void; flash: (id: string) => void;
   editProfile: () => void; closeProfile: () => void;
 };
 
@@ -15,7 +15,7 @@ const Ctx = createContext<UI | null>(null);
 // Transient UI state: bottom sheets, toast, row highlight, and the "edit name & income" screen.
 export function UIProvider({ children }: { children: ReactNode }) {
   const [sheet, setSheet] = useState<Sheet>(null);
-  const [flashId, setFlashId] = useState<number | null>(null);
+  const [flashId, setFlashId] = useState<string | null>(null);
   const [toast, setToast] = useState<UI['toast']>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const timers = useRef<{ t?: ReturnType<typeof setTimeout>; f?: ReturnType<typeof setTimeout> }>({});
@@ -28,7 +28,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setToast({ id: ++n.current, msg });
     timers.current.t = setTimeout(() => setToast(null), 2000);
   }, []);
-  const flash = useCallback((id: number) => {
+  const flash = useCallback((id: string) => {
     clearTimeout(timers.current.f);
     setFlashId(id);
     timers.current.f = setTimeout(() => setFlashId(null), 1900);
