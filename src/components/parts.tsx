@@ -29,7 +29,10 @@ export function TxRow({ x }: { x: Tx }) {
       <CatBadge cat={x.cat} />
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Txt size={15} w={600} lines={1}>{(lang === 'ar' ? x.ar : x.en) || t.noDesc}</Txt>
-        <Txt size={12.5} color={theme.muted} lines={1}>{c[lang] + ' · ' + shortDate(lang, x.date)}</Txt>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+          <Txt size={12.5} color={theme.muted} lines={1} style={{ flexShrink: 1 }}>{c[lang] + ' · ' + shortDate(lang, x.date)}</Txt>
+          {x.image ? <View accessibilityLabel={t.hasInvoice}><Icon name="image" size={13} color={theme.muted} /></View> : null}
+        </View>
       </View>
       <Txt size={15} w={700} num ltr>{f3(x.amount)}</Txt>
     </Press>

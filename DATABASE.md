@@ -1,6 +1,6 @@
 # Floosy database
 
-Floosy stores expenses in a Supabase (Postgres) project named **Floosy**. Two tables: `"Expenses"` (the data) and `"Expenses_History"` (an automatic log of edits and deletes). Everything else (name, income, budgets, language, theme) stays on the device.
+Floosy stores expenses in a Supabase (Postgres) project named **Floosy**. Two tables and one storage bucket: `"Expenses"` (the data) and `"Expenses_History"` (an automatic log of edits and deletes), and the `Invoices` bucket (invoice photos). Everything else (name, income, budgets, language, theme) stays on the device.
 
 ## Table: `public."Expenses"`
 
@@ -14,6 +14,7 @@ The table name has a capital E, so raw SQL must quote it: `public."Expenses"`. I
 | `expense_time` | `time` | yes | now, Kuwait time | Time of the expense, to the second |
 | `category` | `text` | yes | – | One of: `food`, `ent`, `subs`, `loan`, `fuel`, `shop`, `trans`, `bills`, `health`, `other` |
 | `description` | `text` | no | – | Free text, optional |
+| `image` | `text` | no | – | Path of the invoice photo in the `Invoices` storage bucket, e.g. `1793719006681-k3j9x2ab.jpg`. Null when there is no photo |
 | `created_at` | `timestamptz` | yes | `now()` | When the row was created |
 
 Constraints: `amount_kwd > 0`, and `category` must be one of the ten values above (check constraint).
@@ -65,7 +66,7 @@ An audit log of edited and deleted expenses. **Nothing in the app writes to it**
 | `note` | `text` | `Edited` or `Deleted` |
 | `action_at` | `timestamptz` | When it happened (UTC) |
 | `action_at_kuwait` | `timestamp` | The same moment in Kuwait time |
-| `amount_kwd`, `expense_date`, `expense_time`, `category`, `description` | as in `"Expenses"` | The expense's values after an edit, or the values it had when it was deleted |
+| `amount_kwd`, `expense_date`, `expense_time`, `category`, `description`, `image` | as in `"Expenses"` | The expense's values after an edit, or the values it had when it was deleted |
 | `original_created_at` | `timestamptz` | When the expense was first created |
 | `changes` | `jsonb` | Edits only: each changed field with its `before` and `after`. Null for deletes |
 
@@ -92,6 +93,19 @@ where expense_id = '<expense id>'
 order by action_at;
 ```
 
+## Storage bucket: `Invoices`
+
+Invoice photos live in a **private** Supabase Storage bucket named `Invoices` (file limit 10 MB; allowed types `image/jpeg`, `image/png`, `image/webp`, `image/heic`, `image/heif`). Each expense can have one photo; its path in the bucket is saved in `"Expenses".image`.
+
+How the app uses it:
+
+- **Adding a photo:** in the add or edit sheet, "Take photo" (camera, phone only) or "Choose photo" (library). The app re-encodes the photo as JPEG at quality 0.7 to keep uploads small, uploads it to the bucket under a unique name (`<timestamp>-<random>.jpg`), and then saves that path in `image`.
+- **Viewing:** because the bucket is private, the app asks Supabase for a signed link that expires after one hour, and shows the photo in the expense details (tap it for a full-screen view). Expenses that have a photo show a small photo icon in the lists.
+- **Replacing or removing:** only changes the `image` column. **The app never deletes files from the bucket**, so `Expenses_History` can still point at the earlier photo (the history's `changes` shows the old and new path), and a deleted expense keeps its photo. Files are only removed by hand in the dashboard.
+- **Reset app** deletes the expenses but leaves the photos in the bucket.
+
+Temporary test policies on `storage.objects` for the `anon` role (the app's public key), limited to this bucket: view, upload, replace and delete. As with the table, **this is only safe for a single-user test**: anyone with the app's public key can list, read, upload and delete invoices. Replace them with per-user rules (for example a folder per user, `(storage.foldername(name))[1] = auth.uid()::text`) when sign-in is added.
+
 ## Access rules (row-level security)
 
 Row-level security is on. Right now there are four **temporary test policies**, one each for read, add, edit and delete, granted to the `anon` role (the app's public key) with no conditions:
@@ -112,7 +126,8 @@ create policy "testing: anon can delete expenses" on public."Expenses" for delet
 ## How the app connects
 
 - `src/lib/supabase.ts` creates the Supabase client from two environment variables.
-- `src/lib/expenses.ts` maps rows to the app's `Tx` type and does the reads and writes (fetch all, insert, update, delete, delete all).
+- `src/lib/expenses.ts` maps rows to the app's `Tx` type and does the reads and writes (fetch all, insert, update, delete, delete all), plus `uploadInvoice` and `invoiceUrl` for the `Invoices` bucket.
+- `src/components/Invoice.tsx` holds the photo picker (`expo-image-picker`), the photo preview and the full-screen viewer.
 - `src/lib/store.tsx` loads expenses on start, keeps a local cache so the app opens with data before the network answers, and returns `false`/`null` from add, edit, delete and reset when the database can't be reached, so the screens can show an error.
 - The time of an expense is not sent on insert: the database fills in the current Kuwait time. Editing an expense keeps its original time.
 - The app's single `description` is stored once; it is shown in both English and Arabic.

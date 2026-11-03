@@ -4,6 +4,7 @@ import { Animated, Easing, KeyboardAvoidingView, Modal, Platform, Pressable, Scr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { friendly } from '../lib/dates';
 import { CATS, SUGG, type CatId } from '../lib/i18n';
+import { uploadInvoice, type PickedImage } from '../lib/expenses';
 import { curOf, f3, moneyOf } from '../lib/money';
 import { normalizeNumber } from '../lib/num';
 import { catOf } from '../lib/selectors';
@@ -11,6 +12,7 @@ import { useStore } from '../lib/store';
 import { soft } from '../lib/theme';
 import type { Tx } from '../lib/types';
 import { Calendar } from './Calendar';
+import { InvoicePhoto, InvoiceViewer, pickInvoice } from './Invoice';
 import { CatBadge } from './parts';
 import { Chev, Icon, Press, Seg, Txt } from './ui';
 import { useUI } from './ui-state';
@@ -72,6 +74,17 @@ function CloseBtn() {
 }
 
 /* ---------- add / edit ---------- */
+function PhotoBtn({ icon, label, onPress, danger }: { icon: 'camera' | 'image' | 'trash'; label: string; onPress: () => void; danger?: boolean }) {
+  const { theme } = useStore();
+  const color = danger ? theme.up : theme.ink;
+  return (
+    <Press onPress={onPress} label={label} style={{ flex: 1, minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: theme.line, backgroundColor: theme.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 6 }}>
+      <Icon name={icon} size={17} color={color} />
+      <Txt size={13} w={600} color={color} lines={1}>{label}</Txt>
+    </Press>
+  );
+}
+
 function ExpenseSheet({ editing }: { editing: Tx | null }) {
   const { lang, t, theme, today, addTx, updateTx } = useStore();
   const { closeSheet, showToast, flash } = useUI();
@@ -85,7 +98,9 @@ function ExpenseSheet({ editing }: { editing: Tx | null }) {
   const [err, setErr] = useState(false);
   const [saved, setSaved] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<'db' | 'photo' | null>(null);
+  const [photo, setPhoto] = useState<{ kind: 'existing'; path: string } | { kind: 'new'; img: PickedImage } | null>(editing?.image ? { kind: 'existing', path: editing.image } : null);
+  const [photoMsg, setPhotoMsg] = useState<string | null>(null);
   const shake = useRef(new Animated.Value(0)).current;
   const amountRef = useRef<ComponentRef<typeof TextInput>>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -101,23 +116,39 @@ function ExpenseSheet({ editing }: { editing: Tx | null }) {
     Animated.sequence([-8, 7, -5, 3, 0].map((x) => Animated.timing(shake, { toValue: x, duration: 80, useNativeDriver: true }))).start();
   };
 
+  const pick = async (source: 'camera' | 'library') => {
+    setPhotoMsg(null);
+    try {
+      const r = await pickInvoice(source);
+      if (r.denied) setPhotoMsg(t.cameraDenied);
+      else if (r.image) setPhoto({ kind: 'new', img: r.image });
+    } catch { setPhotoMsg(t.invoiceErr); }
+  };
+
   const save = async () => {
     if (!valid) { setErr(true); doShake(); amountRef.current?.focus(); return; }
     if (saving) return;
     const value = Math.round(n * 1000) / 1000;
-    setSaving(true); setFailed(false);
+    setSaving(true); setFailed(null);
+
+    // undefined = leave the invoice as it is; null = remove it; string = path of a newly uploaded photo.
+    let image: string | null | undefined;
+    if (photo?.kind === 'new') {
+      try { image = await uploadInvoice(photo.img); } catch { setSaving(false); setFailed('photo'); return; }
+    } else if (!photo && editing?.image) image = null;
+
     if (editing) {
-      const ok = await updateTx(editing.id, { amount: value, cat, date, description: desc !== initialDesc ? desc.trim() : undefined });
+      const ok = await updateTx(editing.id, { amount: value, cat, date, description: desc !== initialDesc ? desc.trim() : undefined, image });
       setSaving(false);
-      if (!ok) { setFailed(true); return; }
+      if (!ok) { setFailed('db'); return; }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       flash(editing.id);
       closeSheet();
       showToast(t.toastSaved);
     } else {
-      const tx = await addTx({ amount: value, cat, date, description: desc.trim() });
+      const tx = await addTx({ amount: value, cat, date, description: desc.trim(), image: image ?? null });
       setSaving(false);
-      if (!tx) { setFailed(true); return; }
+      if (!tx) { setFailed('db'); return; }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       flash(tx.id);
       setSaved(value);
@@ -206,7 +237,18 @@ function ExpenseSheet({ editing }: { editing: Tx | null }) {
         </View>
       </View>
 
-      {failed ? <Txt size={13} w={600} color={theme.up} align="center">{t.toastError}</Txt> : null}
+      <View style={{ gap: 8 }}>
+        <Txt size={13} w={600} color={theme.muted}>{t.invoice}</Txt>
+        {photo ? <InvoicePhoto height={180} uri={photo.kind === 'new' ? photo.img.uri : undefined} path={photo.kind === 'existing' ? photo.path : undefined} /> : null}
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          {Platform.OS !== 'web' ? <PhotoBtn icon="camera" label={t.takePhoto} onPress={() => pick('camera')} /> : null}
+          <PhotoBtn icon="image" label={photo ? t.changePhoto : t.choosePhoto} onPress={() => pick('library')} />
+          {photo ? <PhotoBtn icon="trash" label={t.removePhoto} danger onPress={() => { setPhoto(null); setPhotoMsg(null); }} /> : null}
+        </View>
+        {photoMsg ? <Txt size={13} w={600} color={theme.up}>{photoMsg}</Txt> : null}
+      </View>
+
+      {failed ? <Txt size={13} w={600} color={theme.up} align="center">{failed === 'photo' ? t.invoiceErr : t.toastError}</Txt> : null}
       <Press onPress={save} disabled={!valid || saving} style={{ height: 56, borderRadius: 18, marginTop: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: valid ? theme.brand : theme.surface2 }}>
         <Icon name="check" size={20} color={valid ? theme.brandInk : theme.muted} />
         <Txt size={16} w={700} color={valid ? theme.brandInk : theme.muted}>{saving ? '…' : editing ? t.saveChanges : t.save}</Txt>
@@ -221,6 +263,7 @@ function DetailSheet({ id }: { id: string }) {
   const { closeSheet, openEdit, showToast } = useUI();
   const [confirm, setConfirm] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [viewing, setViewing] = useState(false);
   const x = txs.find((y) => y.id === id);
   if (!x) return null;
   const c = catOf(x.cat);
@@ -249,6 +292,13 @@ function DetailSheet({ id }: { id: string }) {
         {detailRow(t.category, <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: c.color }} /><Txt size={14} w={600}>{c[lang]}</Txt></View>)}
         {detailRow(t.date, <Txt size={14} w={600} lines={2} style={{ flexShrink: 1, textAlign: 'right' }}>{friendly(lang, x.date, today)}</Txt>, true)}
       </View>
+      {x.image ? (
+        <View style={{ gap: 8 }}>
+          <Txt size={13} w={600} color={theme.muted}>{t.invoiceTitle}</Txt>
+          <InvoicePhoto path={x.image} height={200} onPress={() => setViewing(true)} />
+          {viewing ? <InvoiceViewer path={x.image} onClose={() => setViewing(false)} /> : null}
+        </View>
+      ) : null}
       {!confirm ? (
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <Press onPress={() => openEdit(x)} style={btn}><Icon name="pencil" size={18} /><Txt size={15} w={700}>{t.edit}</Txt></Press>

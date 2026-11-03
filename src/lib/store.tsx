@@ -22,14 +22,14 @@ function initial(): Persisted {
   return { lang: deviceAr ? 'ar' : 'en', dark: false, profile: null, txs: [], budget: 750, catBudgets: DEFAULT_CAT_BUDGETS };
 }
 
-type Patch = { amount?: number; date?: string; cat?: CatId; description?: string };
+type Patch = { amount?: number; date?: string; cat?: CatId; description?: string; image?: string | null };
 
 type Ctx = Persisted & {
   ready: boolean; today: string; t: Strings; theme: Theme; rtl: boolean;
   setLang: (l: Lang) => void; setDark: (d: boolean) => void;
   saveProfile: (p: Profile) => void;
   // Each returns whether it succeeded (false = the database could not be reached).
-  addTx: (x: { amount: number; date: string; cat: CatId; description: string }) => Promise<Tx | null>;
+  addTx: (x: { amount: number; date: string; cat: CatId; description: string; image?: string | null }) => Promise<Tx | null>;
   updateTx: (id: string, patch: Patch) => Promise<boolean>;
   deleteTx: (id: string) => Promise<boolean>;
   setBudget: (n: number) => void;

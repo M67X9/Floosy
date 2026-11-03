@@ -29,7 +29,15 @@
       "expo-font",
       "expo-localization",
       "expo-router",
-      "expo-splash-screen"
+      "expo-splash-screen",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Floosy uses your photos so you can attach an invoice to an expense.",
+          "cameraPermission": "Floosy uses the camera so you can photograph an invoice for an expense.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "scheme": "floosy"
   }
