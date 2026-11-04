@@ -1,10 +1,10 @@
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
-import { Animated, Easing, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { ActivityIndicator, Animated, Easing, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { friendly } from '../lib/dates';
 import { CATS, SUGG, type CatId } from '../lib/i18n';
-import { uploadInvoice, type PickedImage } from '../lib/expenses';
+import { readInvoice, uploadInvoice, type PickedImage } from '../lib/expenses';
 import { curOf, f3, moneyOf } from '../lib/money';
 import { normalizeNumber } from '../lib/num';
 import { catOf } from '../lib/selectors';
@@ -101,6 +101,8 @@ function ExpenseSheet({ editing }: { editing: Tx | null }) {
   const [failed, setFailed] = useState<'db' | 'photo' | null>(null);
   const [photo, setPhoto] = useState<{ kind: 'existing'; path: string } | { kind: 'new'; img: PickedImage } | null>(editing?.image ? { kind: 'existing', path: editing.image } : null);
   const [photoMsg, setPhotoMsg] = useState<string | null>(null);
+  const [reading, setReading] = useState(false);
+  const [readMsg, setReadMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const shake = useRef(new Animated.Value(0)).current;
   const amountRef = useRef<ComponentRef<typeof TextInput>>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -117,12 +119,28 @@ function ExpenseSheet({ editing }: { editing: Tx | null }) {
   };
 
   const pick = async (source: 'camera' | 'library') => {
-    setPhotoMsg(null);
+    setPhotoMsg(null); setReadMsg(null);
     try {
       const r = await pickInvoice(source);
       if (r.denied) setPhotoMsg(t.cameraDenied);
       else if (r.image) setPhoto({ kind: 'new', img: r.image });
     } catch { setPhotoMsg(t.invoiceErr); }
+  };
+
+  // Fills only the fields the model could read; the user still reviews everything before saving.
+  const autofill = async () => {
+    if (photo?.kind !== 'new' || reading) return;
+    setReading(true); setReadMsg(null);
+    try {
+      const d = await readInvoice(photo.img);
+      const found = d.amount != null || d.date != null || d.category != null || d.description != null;
+      if (d.amount != null) { setAmount(d.amount.toFixed(3)); setErr(false); }
+      if (d.date != null) setDate(d.date);
+      if (d.category != null) setCat(d.category);
+      if (d.description != null) setDesc(d.description);
+      setReadMsg(found ? { text: t.autofillDone, ok: true } : { text: t.autofillNone, ok: false });
+    } catch { setReadMsg({ text: t.autofillErr, ok: false }); }
+    setReading(false);
   };
 
   const save = async () => {
@@ -243,8 +261,15 @@ function ExpenseSheet({ editing }: { editing: Tx | null }) {
         <View style={{ flexDirection: 'row', gap: 10 }}>
           {Platform.OS !== 'web' ? <PhotoBtn icon="camera" label={t.takePhoto} onPress={() => pick('camera')} /> : null}
           <PhotoBtn icon="image" label={photo ? t.changePhoto : t.choosePhoto} onPress={() => pick('library')} />
-          {photo ? <PhotoBtn icon="trash" label={t.removePhoto} danger onPress={() => { setPhoto(null); setPhotoMsg(null); }} /> : null}
+          {photo ? <PhotoBtn icon="trash" label={t.removePhoto} danger onPress={() => { setPhoto(null); setPhotoMsg(null); setReadMsg(null); }} /> : null}
         </View>
+        {photo?.kind === 'new' ? (
+          <Press onPress={autofill} disabled={reading} label={t.autofill} style={{ minHeight: 48, borderRadius: 14, backgroundColor: theme.surface2, borderWidth: 1, borderColor: theme.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 12 }}>
+            {reading ? <ActivityIndicator color={theme.ink} size="small" /> : <Icon name="spark" size={18} color={theme.ink} />}
+            <Txt size={14} w={700}>{reading ? t.autofilling : t.autofill}</Txt>
+          </Press>
+        ) : null}
+        {readMsg ? <Txt size={13} w={600} color={readMsg.ok ? theme.muted : theme.up}>{readMsg.text}</Txt> : null}
         {photoMsg ? <Txt size={13} w={600} color={theme.up}>{photoMsg}</Txt> : null}
       </View>
 

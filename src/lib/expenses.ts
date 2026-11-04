@@ -85,3 +85,16 @@ export async function invoiceUrl(path: string): Promise<string> {
   urlCache.set(path, { url: data.signedUrl, expires: Date.now() + (TTL - 300) * 1000 });
   return data.signedUrl;
 }
+
+// Asks the "read-invoice" edge function (free OpenRouter vision model) to read a picked photo.
+// Fields it could not read are null; the caller only fills the ones that are present.
+export type InvoiceDetails = { amount: number | null; date: string | null; category: CatId | null; description: string | null };
+
+export async function readInvoice(img: PickedImage): Promise<InvoiceDetails> {
+  const res = await fetch(img.uri);
+  const body = await res.arrayBuffer();
+  const type = img.mimeType === 'image/png' || img.mimeType === 'image/webp' ? img.mimeType : 'image/jpeg';
+  const { data, error } = await supabase.functions.invoke<InvoiceDetails>('read-invoice', { body, headers: { 'Content-Type': type } });
+  if (error || !data) throw error ?? new Error('Could not read the invoice');
+  return data;
+}
