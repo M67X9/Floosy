@@ -62,15 +62,15 @@ const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', '
 
 export type PickedImage = { uri: string; mimeType?: string | null };
 
-// Uploads a picked photo and returns its path in the bucket (store that in `image`).
+// Uploads a picked photo through the "upload-invoice" edge function (which holds the storage write access,
+// not the app) and returns its path in the bucket (store that in `image`).
 export async function uploadInvoice(img: PickedImage): Promise<string> {
   const res = await fetch(img.uri);
   const body = await res.arrayBuffer();
   const type = img.mimeType && EXT[img.mimeType] ? img.mimeType : 'image/jpeg';
-  const path = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${EXT[type]}`;
-  const { error } = await supabase.storage.from(BUCKET).upload(path, body, { contentType: type });
-  if (error) throw error;
-  return path;
+  const { data, error } = await supabase.functions.invoke<{ path: string }>('upload-invoice', { body, headers: { 'Content-Type': type } });
+  if (error || !data?.path) throw error ?? new Error('Upload failed');
+  return data.path;
 }
 
 // The bucket is private, so photos are shown through short-lived signed links.
