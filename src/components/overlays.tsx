@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
-import { ActivityIndicator, Animated, Easing, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Easing, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { friendly } from '../lib/dates';
 import { CATS, SUGG, type CatId } from '../lib/i18n';
@@ -118,21 +118,11 @@ function ExpenseSheet({ editing }: { editing: Tx | null }) {
     Animated.sequence([-8, 7, -5, 3, 0].map((x) => Animated.timing(shake, { toValue: x, duration: 80, useNativeDriver: true }))).start();
   };
 
-  const pick = async (source: 'camera' | 'library') => {
-    setPhotoMsg(null); setReadMsg(null);
-    try {
-      const r = await pickInvoice(source);
-      if (r.denied) setPhotoMsg(t.cameraDenied);
-      else if (r.image) setPhoto({ kind: 'new', img: r.image });
-    } catch { setPhotoMsg(t.invoiceErr); }
-  };
-
   // Fills only the fields the model could read; the user still reviews everything before saving.
-  const autofill = async () => {
-    if (photo?.kind !== 'new' || reading) return;
+  const runAutofill = async (img: PickedImage) => {
     setReading(true); setReadMsg(null);
     try {
-      const d = await readInvoice(photo.img);
+      const d = await readInvoice(img);
       const found = d.amount != null || d.date != null || d.category != null || d.description != null;
       if (d.amount != null) { setAmount(d.amount.toFixed(3)); setErr(false); }
       if (d.date != null) setDate(d.date);
@@ -141,6 +131,31 @@ function ExpenseSheet({ editing }: { editing: Tx | null }) {
       setReadMsg(found ? { text: t.autofillDone, ok: true } : { text: t.autofillNone, ok: false });
     } catch { setReadMsg({ text: t.autofillErr, ok: false }); }
     setReading(false);
+  };
+
+  // `thenRead`: the photo was picked through the Autofill button, so read it straight away.
+  const pick = async (source: 'camera' | 'library', thenRead = false) => {
+    setPhotoMsg(null); setReadMsg(null);
+    try {
+      const r = await pickInvoice(source);
+      if (r.denied) setPhotoMsg(t.cameraDenied);
+      else if (r.image) {
+        setPhoto({ kind: 'new', img: r.image });
+        if (thenRead) await runAutofill(r.image);
+      }
+    } catch { setPhotoMsg(t.invoiceErr); }
+  };
+
+  // With a photo already picked it reads that photo; otherwise it opens the photo picker first.
+  const autofill = () => {
+    if (reading) return;
+    if (photo?.kind === 'new') { runAutofill(photo.img); return; }
+    if (Platform.OS === 'web') { pick('library', true); return; }
+    Alert.alert(t.autofill, undefined, [
+      { text: t.takePhoto, onPress: () => { pick('camera', true); } },
+      { text: t.choosePhoto, onPress: () => { pick('library', true); } },
+      { text: t.cancel, style: 'cancel' }
+    ]);
   };
 
   const save = async () => {
@@ -263,12 +278,10 @@ function ExpenseSheet({ editing }: { editing: Tx | null }) {
           <PhotoBtn icon="image" label={photo ? t.changePhoto : t.choosePhoto} onPress={() => pick('library')} />
           {photo ? <PhotoBtn icon="trash" label={t.removePhoto} danger onPress={() => { setPhoto(null); setPhotoMsg(null); setReadMsg(null); }} /> : null}
         </View>
-        {photo?.kind === 'new' ? (
-          <Press onPress={autofill} disabled={reading} label={t.autofill} style={{ minHeight: 48, borderRadius: 14, backgroundColor: theme.surface2, borderWidth: 1, borderColor: theme.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 12 }}>
-            {reading ? <ActivityIndicator color={theme.ink} size="small" /> : <Icon name="spark" size={18} color={theme.ink} />}
-            <Txt size={14} w={700}>{reading ? t.autofilling : t.autofill}</Txt>
-          </Press>
-        ) : null}
+        <Press onPress={autofill} disabled={reading} label={t.autofill} style={{ minHeight: 48, borderRadius: 14, backgroundColor: theme.surface2, borderWidth: 1, borderColor: theme.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 12 }}>
+          {reading ? <ActivityIndicator color={theme.ink} size="small" /> : <Icon name="spark" size={18} color={theme.ink} />}
+          <Txt size={14} w={700}>{reading ? t.autofilling : t.autofill}</Txt>
+        </Press>
         {readMsg ? <Txt size={13} w={600} color={readMsg.ok ? theme.muted : theme.up}>{readMsg.text}</Txt> : null}
         {photoMsg ? <Txt size={13} w={600} color={theme.up}>{photoMsg}</Txt> : null}
       </View>
