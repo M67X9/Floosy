@@ -1,8 +1,8 @@
 // Uploads one invoice photo to the private "Invoices" bucket using the service role,
-// so the app no longer needs storage write access with its public key.
+// so the app never needs storage write access. Only signed-in users may upload; the file goes in their own folder.
 //
-// Request:  POST, body = raw image bytes, Content-Type = image/jpeg | png | webp | heic | heif
-// Response: 200 { "path": "<timestamp>-<random>.<ext>" }  (store this in Expenses.image)
+// Request:  POST, Authorization: Bearer <user access token>, body = raw image bytes, Content-Type = image/jpeg | png | webp | heic | heif
+// Response: 200 { "path": "<user id>/<timestamp>-<random>.<ext>" }  (store this in Expenses.image)
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const BUCKET = 'Invoices';
@@ -25,6 +25,10 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
+  const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
+  const { data: auth } = token ? await admin.auth.getUser(token) : { data: { user: null } };
+  if (!auth.user) return json({ error: 'Sign in to upload' }, 401);
+
   const type = (req.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
   const ext = EXT[type];
   if (!ext) return json({ error: 'Unsupported image type' }, 415);
@@ -36,7 +40,7 @@ Deno.serve(async (req) => {
   if (body.byteLength === 0) return json({ error: 'Empty body' }, 400);
   if (body.byteLength > MAX_BYTES) return json({ error: 'Image is larger than 10 MB' }, 413);
 
-  const path = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+  const path = `${auth.user.id}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
   const { error } = await admin.storage.from(BUCKET).upload(path, body, { contentType: type, upsert: false });
   if (error) {
     console.error('upload failed', error.message);

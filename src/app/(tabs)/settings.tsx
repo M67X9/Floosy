@@ -5,11 +5,13 @@ import { Screen } from '../../components/Screen';
 import { Card, Chev, Icon, Press, Seg, Txt } from '../../components/ui';
 import { useUI } from '../../components/ui-state';
 import type { IconName } from '../../lib/icons';
+import { useAuth } from '../../lib/auth';
 import { moneyOf } from '../../lib/money';
 import { useStore } from '../../lib/store';
 
 export default function Settings() {
   const { lang, t, theme, profile, budget, setLang, dark, setDark, resetAll, rtl } = useStore();
+  const { user, signOut } = useAuth();
   const { editProfile, closeSheet, closeProfile, showToast } = useUI();
   const [confirming, setConfirming] = useState(false);
   const [resetFailed, setResetFailed] = useState(false);
@@ -47,7 +49,7 @@ export default function Settings() {
         </View>
         <View style={{ gap: 2 }}>
           <Txt size={17} w={700}>{name}</Txt>
-          <Txt size={13} color={theme.muted}>{t.profileSub}</Txt>
+          <Txt size={13} color={theme.muted} ltr lines={1}>{user?.email ?? t.profileSub}</Txt>
         </View>
       </Card>
 
@@ -60,6 +62,13 @@ export default function Settings() {
       </Card>
 
       <Card flat style={{ paddingHorizontal: 16 }}>
+        <Press onPress={signOut} label={t.signOut} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 60, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.line }}>
+          <Icon name="chevL" size={18} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Txt size={15} w={600}>{t.signOut}</Txt>
+            <Txt size={12.5} color={theme.muted}>{t.signOutSub}</Txt>
+          </View>
+        </Press>
         <Press onPress={() => setConfirming(true)} label={t.resetRow} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 60, paddingVertical: 12 }}>
           <Icon name="trash" size={18} color={theme.up} />
           <View style={{ flex: 1, gap: 2 }}>

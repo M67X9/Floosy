@@ -1,12 +1,16 @@
 // Reads an invoice / receipt photo with a free OpenRouter vision model and returns the expense details.
 //
-// Request:  POST, body = raw image bytes, Content-Type = image/jpeg | png | webp
+// Only signed-in users may call it (the user's access token is checked).
+// Request:  POST, Authorization: Bearer <user access token>, body = raw image bytes, Content-Type = image/jpeg | png | webp
 // Response: 200 { amount: number|null, date: "YYYY-MM-DD"|null, category: CatId|null, description: string|null }
 //           A field is null when the model could not read it. The app only fills the fields that are present.
 //
 // Secrets (Supabase dashboard > Edge Functions > Secrets):
 //   OPENROUTER_API_KEY  required
 //   OPENROUTER_MODELS   optional, comma-separated model ids tried in order (free models come and go)
+import { createClient } from 'npm:@supabase/supabase-js@2';
+
+const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } });
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_MODELS = ['google/gemma-4-31b-it:free', 'nvidia/nemotron-3.5-super-vl:free', 'google/gemma-4-26b-a4b-it:free'];
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -67,6 +71,10 @@ function clean(raw: Record<string, unknown>) {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+
+  const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
+  const { data: auth } = token ? await admin.auth.getUser(token) : { data: { user: null } };
+  if (!auth.user) return json({ error: 'Sign in to use autofill' }, 401);
 
   const key = Deno.env.get('OPENROUTER_API_KEY');
   if (!key) return json({ error: 'Autofill is not configured' }, 503);
