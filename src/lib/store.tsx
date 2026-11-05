@@ -84,15 +84,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       try {
         const raw = await AsyncStorage.getItem(userKey(userId));
         if (raw) saved = JSON.parse(raw);
-        else {
-          // First sign-in on a device that used Floosy before accounts: keep its name, income and budget (not the old expense cache).
-          const old = await AsyncStorage.getItem(LEGACY_KEY);
-          if (old) {
-            const o = JSON.parse(old) as Partial<Persisted>;
-            saved = { profile: o.profile, budget: o.budget, catBudgets: o.catBudgets };
-            await AsyncStorage.removeItem(LEGACY_KEY);
-          }
-        }
       } catch { /* start fresh */ }
       if (cancelled) return;
       const meta = metaRef.current;

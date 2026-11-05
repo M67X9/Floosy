@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth, type AuthError } from '../lib/auth';
+import { normalizeNumber } from '../lib/num';
+import { curOf } from '../lib/money';
 import { useStore } from '../lib/store';
 import { Chev, Press, Seg, Txt } from './ui';
 
@@ -17,6 +19,8 @@ export function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [name, setName] = useState('');
+  const [income, setIncome] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -33,11 +37,13 @@ export function AuthScreen() {
     const em = email.trim();
     if (!EMAIL.test(em)) { setErr(t.authEmailErr); return; }
     if (mode === 'up') {
+      if (!name.trim()) { setErr(t.obNameErr); return; }
+      if (!(parseFloat(income) > 0)) { setErr(t.obIncomeErr); return; }
       if (password.length < MIN_PASSWORD) { setErr(t.authPassErr); return; }
       if (password !== confirm) { setErr(t.authMatchErr); return; }
     } else if (!password) { setErr(t.authPassEmpty); return; }
     setErr(null); setBusy(true);
-    const r = mode === 'up' ? await signUp(em, password) : await signIn(em, password);
+    const r = mode === 'up' ? await signUp(em, password, { name: name.trim(), income: Math.round(parseFloat(income) * 1000) / 1000 }) : await signIn(em, password);
     setBusy(false);
     if (!r.ok) { setErr(messages[r.error]); return; }
     // Signed in: the app takes over. Signed up but unconfirmed: ask them to open the email.
@@ -77,6 +83,23 @@ export function AuthScreen() {
               </>
             ) : (
               <>
+                {up ? (
+                  <>
+                    <View style={{ gap: 8 }}>
+                      <Txt size={13} w={600} color={theme.muted}>{t.obName}</Txt>
+                      <TextInput value={name} onChangeText={(v) => { setName(v); setErr(null); }} placeholder={t.obNamePh} placeholderTextColor={theme.muted} autoComplete="given-name" textContentType="givenName" returnKeyType="next"
+                        style={[field, { textAlign: rtl ? 'right' : 'left' }]} />
+                    </View>
+                    <View style={{ gap: 8 }}>
+                      <Txt size={13} w={600} color={theme.muted}>{t.obIncome}</Txt>
+                      <View style={{ direction: 'ltr', justifyContent: 'center' }}>
+                        <TextInput value={income} onChangeText={(raw) => { const v = normalizeNumber(raw); if (/^\d{0,7}(\.\d{0,3})?$/.test(v)) { setIncome(v); setErr(null); } }} placeholder="0.000" placeholderTextColor={theme.muted} keyboardType="decimal-pad" inputMode="decimal"
+                          style={[field, { paddingEnd: 60 }]} />
+                        <View pointerEvents="none" style={{ position: 'absolute', right: 16 }}><Txt size={15} w={700} color={theme.muted}>{curOf(lang)}</Txt></View>
+                      </View>
+                    </View>
+                  </>
+                ) : null}
                 <View style={{ gap: 8 }}>
                   <Txt size={13} w={600} color={theme.muted}>{t.authEmail}</Txt>
                   <TextInput value={email} onChangeText={(v) => { setEmail(v); setErr(null); }} placeholder="name@example.com" placeholderTextColor={theme.muted}

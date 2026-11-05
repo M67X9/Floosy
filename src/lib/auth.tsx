@@ -10,7 +10,7 @@ export type AuthResult = { ok: true; needsConfirm: boolean } | { ok: false; erro
 type Ctx = {
   ready: boolean; user: User | null;
   signIn: (email: string, password: string) => Promise<AuthResult>;
-  signUp: (email: string, password: string) => Promise<AuthResult>;
+  signUp: (email: string, password: string, profile: { name: string; income: number }) => Promise<AuthResult>;
   signOut: () => Promise<void>;
 };
 
@@ -55,10 +55,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // With "Confirm email" on (the Supabase default) there is no session until the link in the email is opened.
-  const signUp = useCallback<Ctx['signUp']>(async (email, password) => {
+  const signUp = useCallback<Ctx['signUp']>(async (email, password, profile) => {
     try {
       const emailRedirectTo = Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.origin : undefined;
-      const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo } });
+      const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo, data: { floosy: { profile, budget: 750 } } } });
       if (error) return { ok: false, error: errorOf(error) };
       // For an email that is already registered Supabase answers with a user that has no identities.
       if (data.user && data.user.identities?.length === 0) return { ok: false, error: 'exists' };
