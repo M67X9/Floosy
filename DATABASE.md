@@ -125,6 +125,7 @@ update public."Expenses" set user_id = (select id from auth.users where email = 
 
   (Their old invoice photos are at the bucket root, so they will not display; the files are still there.)
 - **Reset app** deletes only the signed-in user's expenses (the policies limit it), then clears their name, income and budget.
+- **Password rules** (set in Authentication > Sign In / Providers > Email, enforced by Supabase): at least 8 characters, with a lowercase letter, an uppercase letter and a digit. The sign-up form (`passwordRules` in `src/components/Auth.tsx`) shows a live checklist and must be kept in step with the dashboard. Leaked-password protection needs the Pro plan.
 - Not built yet: password reset ("forgot password") and deleting an account.
 
 ## How the app connects

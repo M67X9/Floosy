@@ -9,6 +9,8 @@ import { Chev, Press, Seg, Txt } from './ui';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const MIN_PASSWORD = 8;
+// Must match Authentication > Sign In / Providers > Email in the Supabase dashboard (the server enforces it).
+const passwordRules = (p: string) => ({ len: p.length >= MIN_PASSWORD, lower: /[a-z]/.test(p), upper: /[A-Z]/.test(p), digit: /\d/.test(p) });
 
 // Sign in / create account. Shown instead of the app whenever nobody is signed in.
 export function AuthScreen() {
@@ -39,7 +41,7 @@ export function AuthScreen() {
     if (mode === 'up') {
       if (!name.trim()) { setErr(t.obNameErr); return; }
       if (!(parseFloat(income) > 0)) { setErr(t.obIncomeErr); return; }
-      if (password.length < MIN_PASSWORD) { setErr(t.authPassErr); return; }
+      if (!Object.values(passwordRules(password)).every(Boolean)) { setErr(t.authPassErr); return; }
       if (password !== confirm) { setErr(t.authMatchErr); return; }
     } else if (!password) { setErr(t.authPassEmpty); return; }
     setErr(null); setBusy(true);
@@ -52,6 +54,7 @@ export function AuthScreen() {
 
   const field = { height: 52, borderRadius: 14, borderWidth: 1, borderColor: theme.line, backgroundColor: theme.surface2, paddingHorizontal: 14, color: theme.ink, fontFamily: 'IBMPlexSansArabic_600SemiBold', fontSize: 16, textAlign: 'left' } as const;
   const up = mode === 'up';
+  const rules = passwordRules(password);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.hero, direction: rtl ? 'rtl' : 'ltr' }}>
@@ -111,6 +114,13 @@ export function AuthScreen() {
                     secureTextEntry autoCapitalize="none" autoCorrect={false} autoComplete={up ? 'new-password' : 'current-password'} textContentType={up ? 'newPassword' : 'password'}
                     returnKeyType={up ? 'next' : 'go'} onSubmitEditing={up ? undefined : submit} style={field} />
                 </View>
+                {up ? (
+                  <View style={{ gap: 4 }}>
+                    {([['len', t.authRuleLen], ['lower', t.authRuleLower], ['upper', t.authRuleUpper], ['digit', t.authRuleDigit]] as const).map(([k, label]) => (
+                      <Txt key={k} size={13} w={600} color={rules[k] ? theme.brandText : theme.muted}>{rules[k] ? '✓ ' : '○ '}{label}</Txt>
+                    ))}
+                  </View>
+                ) : null}
                 {up ? (
                   <View style={{ gap: 8 }}>
                     <Txt size={13} w={600} color={theme.muted}>{t.authConfirm}</Txt>
