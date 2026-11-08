@@ -128,6 +128,18 @@ update public."Expenses" set user_id = (select id from auth.users where email = 
 - **Password rules** (set in Authentication > Sign In / Providers > Email, enforced by Supabase): at least 8 characters, with a lowercase letter, an uppercase letter and a digit. The sign-up form (`passwordRules` in `src/components/Auth.tsx`) shows a live checklist and must be kept in step with the dashboard. Leaked-password protection needs the Pro plan.
 - Not built yet: password reset ("forgot password") and deleting an account.
 
+## Payments (Floosy Pro, MyFatoorah sandbox)
+
+Settings has a **Floosy Pro** card with a Pay button. The flow:
+
+1. The app inserts a row in `public.purchases` with only `product = 'pro'`. Signed-in users can read their own purchases and insert only the `product` column (column-level grant); `status` starts `pending`, and the price, status and gateway ids can only be written by edge functions. Users cannot update or delete purchases.
+2. The app calls the `initiate-payment` edge function (`supabase/functions/initiate-payment/index.ts`) with `{ purchaseId }` and nothing else. The function verifies the user's token, loads **that user's** pending purchase, takes the price from its hardcoded `PRODUCTS` map (`pro` = KWD 0.920, about USD 2.99), and calls MyFatoorah `POST /v2/SendPayment` with that amount, the purchase id as `CustomerReference`, and the return URLs. It saves `amount`, `currency` and `invoice_id` on the purchase and returns `{ url }`.
+3. The app sends the browser to that URL (`window.location.assign` on web, `Linking.openURL` on a phone). After paying or cancelling, MyFatoorah sends the customer to `<APP_URL>/payment-result?purchase=<id>&result=success|failed` (plus its own `paymentId`). That page (`src/app/payment-result.tsx`) is only a message: the query string is a hint, **not proof of payment**.
+
+Secrets (Supabase dashboard > Edge Functions > Secrets): `MYFATOORAH_API_KEY` (required; the sandbox token), optional `MYFATOORAH_BASE_URL` (default `https://apitest.myfatoorah.com`; live Kuwait is `https://api.myfatoorah.com`) and `APP_URL` (default `https://floosy-six.vercel.app`).
+
+Not built yet: confirming the payment with MyFatoorah (`GetPaymentStatus` using the invoice id, from a `verify-payment` function and/or the MyFatoorah webhook) and then setting `purchases.status = 'paid'`, and gating Pro features on a paid purchase.
+
 ## How the app connects
 
 - `src/lib/supabase.ts` creates the Supabase client from two environment variables and keeps the sign-in session in AsyncStorage.

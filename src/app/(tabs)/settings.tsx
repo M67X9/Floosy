@@ -1,12 +1,13 @@
 import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { Modal, Pressable, View } from 'react-native';
+import { ActivityIndicator, Linking, Modal, Platform, Pressable, View } from 'react-native';
 import { Screen } from '../../components/Screen';
 import { Card, Chev, Icon, Press, Seg, Txt } from '../../components/ui';
 import { useUI } from '../../components/ui-state';
 import type { IconName } from '../../lib/icons';
 import { useAuth } from '../../lib/auth';
 import { moneyOf } from '../../lib/money';
+import { startProPayment } from '../../lib/payments';
 import { useStore } from '../../lib/store';
 
 export default function Settings() {
@@ -15,6 +16,8 @@ export default function Settings() {
   const { editProfile, closeSheet, closeProfile, showToast } = useUI();
   const [confirming, setConfirming] = useState(false);
   const [resetFailed, setResetFailed] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [payFailed, setPayFailed] = useState(false);
   const money = moneyOf(lang);
   const name = profile?.name || t.friend;
 
@@ -27,6 +30,18 @@ export default function Settings() {
       </>
     );
     return opts?.onPress ? <Press onPress={opts.onPress} style={style}>{body}</Press> : <View style={style}>{body}</View>;
+  };
+
+  // Ask the server for a payment link, then send the customer to the gateway's page.
+  const pay = async () => {
+    if (paying) return;
+    setPaying(true); setPayFailed(false);
+    try {
+      const url = await startProPayment();
+      if (Platform.OS === 'web') window.location.assign(url);
+      else await Linking.openURL(url);
+    } catch (e) { console.warn('Could not start the payment', e); setPayFailed(true); }
+    setPaying(false);
   };
 
   const doReset = async () => {
@@ -51,6 +66,20 @@ export default function Settings() {
           <Txt size={17} w={700}>{name}</Txt>
           <Txt size={13} color={theme.muted} ltr lines={1}>{user?.email ?? t.profileSub}</Txt>
         </View>
+      </Card>
+
+      <Card flat style={{ padding: 16, gap: 12 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: theme.lime, alignItems: 'center', justifyContent: 'center' }}><Icon name="spark" size={22} color="#0B1F18" /></View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Txt size={17} w={700}>{t.proTitle}</Txt>
+            <Txt size={13} color={theme.muted} lh={18}>{t.proBody}</Txt>
+          </View>
+        </View>
+        {payFailed ? <Txt size={13} w={600} color={theme.up}>{t.proErr}</Txt> : null}
+        <Press onPress={pay} disabled={paying} label={t.proPay} style={{ height: 52, borderRadius: 16, backgroundColor: theme.brand, alignItems: 'center', justifyContent: 'center', opacity: paying ? 0.7 : 1 }}>
+          {paying ? <ActivityIndicator color={theme.brandInk} /> : <Txt size={16} w={700} color={theme.brandInk}>{t.proPay}</Txt>}
+        </Press>
       </Card>
 
       <Card flat style={{ paddingVertical: 4, paddingHorizontal: 16 }}>

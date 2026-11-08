@@ -92,7 +92,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setS((c) => ({ ...c, profile, budget, catBudgets: saved.catBudgets ?? DEFAULT_CAT_BUDGETS, txs: (saved.txs ?? []).filter((x) => typeof x.id === 'string') }));
       setLoadedFor(userId);
       // Details that only exist on this device are copied to the account.
-      if (!meta && profile) supabase.auth.updateUser({ data: { floosy: { profile, budget } } }).catch(() => {});
+      if (!meta && profile) supabase.auth.updateUser({ data: { floosy: { profile, budget }, display_name: profile.name } }).catch(() => {});
     })();
     return () => { cancelled = true; };
   }, [authReady, userId]);
@@ -126,7 +126,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const setLang = useCallback((lang: Lang) => setS((c) => ({ ...c, lang })), []);
   const setDark = useCallback((dark: boolean) => setS((c) => ({ ...c, dark })), []);
   const syncMeta = useCallback((meta: Meta | null) => {
-    supabase.auth.updateUser({ data: { floosy: meta } }).catch((e) => console.warn('Could not save to the account', e));
+    supabase.auth.updateUser({ data: { floosy: meta, ...(meta?.profile ? { display_name: meta.profile.name } : {}) } }).catch((e) => console.warn('Could not save to the account', e));
   }, []);
   const saveProfile = useCallback((profile: Profile) => {
     setS((c) => ({ ...c, profile }));

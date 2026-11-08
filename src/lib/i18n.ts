@@ -45,7 +45,9 @@ authEmailErr: 'Enter a valid email address.', authPassErr: 'Use 8 or more charac
 authInvalid: 'Wrong email or password.', authExists: 'This email is already registered. Try signing in.', authUnconfirmed: 'Confirm your email first. Open the link we sent you.',
 authRate: 'Too many attempts. Wait a minute and try again.', authNetwork: 'Couldn’t reach the server. Check your connection.', authOther: 'Something went wrong. Please try again.',
 authCheckTitle: 'Check your email', authCheckBody: 'We sent a confirmation link to this address. Open it, then come back and sign in.',
-signOut: 'Sign out', signOutSub: 'You can sign back in anytime', account: 'Account'
+signOut: 'Sign out', signOutSub: 'You can sign back in anytime', account: 'Account',
+proTitle: 'Floosy Pro', proBody: 'One payment of $2.99. Test mode: no real money is taken.', proPay: 'Pay $2.99', proOpening: 'Opening the payment page…', proErr: 'Couldn’t start the payment. Please try again.',
+payBackOk: 'Payment submitted', payBackOkBody: 'Thanks! We’re waiting for the payment gateway to confirm it.', payBackFail: 'Payment not completed', payBackFailBody: 'You were not charged. You can try again from Settings.', payBack: 'Back to Floosy'
 };
 
 export type Strings = typeof en;
@@ -73,7 +75,9 @@ authEmailErr: 'أدخل بريدًا إلكترونيًا صحيحًا.', authPa
 authInvalid: 'البريد الإلكتروني أو كلمة المرور غير صحيحة.', authExists: 'هذا البريد مسجّل مسبقًا. جرّب تسجيل الدخول.', authUnconfirmed: 'أكّد بريدك الإلكتروني أولًا. افتح الرابط الذي أرسلناه لك.',
 authRate: 'محاولات كثيرة. انتظر دقيقة ثم حاول مرة أخرى.', authNetwork: 'تعذر الاتصال بالخادم. تحقق من اتصالك.', authOther: 'حدث خطأ ما. حاول مرة أخرى.',
 authCheckTitle: 'تحقق من بريدك', authCheckBody: 'أرسلنا رابط التأكيد إلى هذا العنوان. افتحه ثم عد وسجّل الدخول.',
-signOut: 'تسجيل الخروج', signOutSub: 'يمكنك تسجيل الدخول مرة أخرى في أي وقت', account: 'الحساب'
+signOut: 'تسجيل الخروج', signOutSub: 'يمكنك تسجيل الدخول مرة أخرى في أي وقت', account: 'الحساب',
+proTitle: 'فلوسي برو', proBody: 'دفعة واحدة بقيمة 2.99 دولار. وضع تجريبي: لا يتم خصم أي مبلغ حقيقي.', proPay: 'ادفع 2.99 دولار', proOpening: 'جارٍ فتح صفحة الدفع…', proErr: 'تعذر بدء الدفع. حاول مرة أخرى.',
+payBackOk: 'تم إرسال الدفعة', payBackOkBody: 'شكرًا! بانتظار تأكيد بوابة الدفع.', payBackFail: 'لم تكتمل عملية الدفع', payBackFailBody: 'لم يتم خصم أي مبلغ منك. يمكنك المحاولة مرة أخرى من الإعدادات.', payBack: 'العودة إلى فلوسي'
 };
 
 export const T: Record<Lang, Strings> = { en, ar };
