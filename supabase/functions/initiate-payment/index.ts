@@ -48,9 +48,9 @@ Deno.serve(async (req) => {
   if (typeof purchaseId !== 'string' || !UUID.test(purchaseId)) return json({ error: 'Invalid purchase' }, 400);
 
   // The purchase must exist, be this user's, and still be unpaid.
-  const { data: purchase } = await admin.from('purchases').select('id, product, status').eq('id', purchaseId).eq('user_id', user.id).maybeSingle();
+  const { data: purchase } = await admin.from('purchases').select('id, product, payment_status').eq('id', purchaseId).eq('user_id', user.id).maybeSingle();
   if (!purchase) return json({ error: 'Purchase not found' }, 404);
-  if (purchase.status !== 'pending') return json({ error: 'This purchase is already closed' }, 409);
+  if (purchase.payment_status !== 'pending' && purchase.payment_status !== 'awaiting_payment') return json({ error: 'This purchase is already closed' }, 409);
 
   const product = PRODUCTS[purchase.product];
   if (!product) return json({ error: 'Unknown product' }, 400);
@@ -89,8 +89,8 @@ Deno.serve(async (req) => {
     return json({ error: 'The payment gateway refused the request' }, 502);
   }
 
-  // Remember what we charged and which gateway invoice it is, for checking the payment later.
-  const { error } = await admin.from('purchases').update({ amount: product.amount, currency: product.currency, invoice_id: String(body.Data.InvoiceId) }).eq('id', purchase.id);
+  // Remember what we charged and which gateway invoice it is (the webhook finds the purchase by invoice id).
+  const { error } = await admin.from('purchases').update({ amount: product.amount, currency: product.currency, invoice_id: String(body.Data.InvoiceId), payment_status: 'awaiting_payment' }).eq('id', purchase.id);
   if (error) console.error('could not save invoice', error.message);
 
   return json({ url });
